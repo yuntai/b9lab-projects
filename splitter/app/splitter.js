@@ -14,8 +14,9 @@ web3.eth.getCoinbase(function(err, coinbase) {
 });
 
 // Your deployed address changes every time you deploy.
-var splitterAddress = "0x9d5ccc58b0c555eef6632cef80a00a250a1f695d";
+var splitterAddress = "0xd9ae1a54e6f517592d7d4a7bd7f5ff2d23861aeb";
 
+var ownerAddress = web3.eth.accounts[0];
 var bobAddress = web3.eth.accounts[1];
 var carolAddress = web3.eth.accounts[2];
 var aliceAddress = web3.eth.accounts[3];
@@ -33,12 +34,16 @@ web3.eth.getBalance(splitterAddress, function(err, balance) {
 });
 
 function updateBalance() {
-  var bal = web3.eth.getBalance(bobAddress);
+  var bal = web3.eth.getBalance(ownerAddress);
+	document.getElementById('owner').innerText = bal;
+  bal = web3.eth.getBalance(bobAddress);
 	document.getElementById('bob').innerText = bal;
 	bal = web3.eth.getBalance(carolAddress);
 	document.getElementById('carol').innerText = bal;
 	bal = web3.eth.getBalance(aliceAddress);
 	document.getElementById('alice').innerText = bal;
+  bal = web3.eth.getBalance(splitterAddress);
+	document.getElementById('contract').innerText = bal;
 }
 
 function split() {
