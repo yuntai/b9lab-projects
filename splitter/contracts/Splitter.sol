@@ -18,11 +18,15 @@ contract Splitter {
     payable
     returns(bool success)
   {
-    if(msg.value == 0) throw;
-    var value = msg.value / 2;
-    if((2*value) != msg.value) throw;
-    bob.send(value);
-    carol.send(value);
+    if(msg.value < 2) throw;
+    var amount = msg.value/2;
+    
+    if(amount * 2 > msg.value) {
+      if(!msg.sender.send(1)) {
+        return false;
+      }
+    }
+    return bob.send(amount) && carol.send(amount);
   }
 
   function kill() public {
