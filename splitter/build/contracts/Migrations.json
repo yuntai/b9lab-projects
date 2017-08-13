@@ -94,10 +94,16 @@
     "1502552678280": {
       "events": {},
       "links": {},
-      "address": "0xd6240d32e3e79c28544c0165e74483a0c1e32f20",
-      "updated_at": 1502552687157
+      "address": "0x531a4e209ca0d0699137042df1100a03134007fb",
+      "updated_at": 1502619040732
+    },
+    "1502619247234": {
+      "events": {},
+      "links": {},
+      "address": "0xdd0fa433cb4eb06be973583de498c4c53f9878db",
+      "updated_at": 1502619253074
     }
   },
   "schema_version": "0.0.5",
-  "updated_at": 1502552687157
+  "updated_at": 1502619253074
 }

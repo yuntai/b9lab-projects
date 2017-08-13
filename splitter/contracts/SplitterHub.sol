@@ -17,14 +17,14 @@ contract SplitterHub {
     owner = msg.sender;
   }
 
-  function addSplitter(address spliterOwner, address receiver0, address receiver1)
+  function addSplitter(address receiver0, address receiver1)
     public
     returns(bool success) 
   {
     SplitterStruct memory newSplitter;
-    newSplitter.owner = msg.splitterOwner;
-    newSplitter.receiver0 = msg.receiver0;
-    newSplitter.receiver1 = msg.receiver1;
+    newSplitter.owner = msg.sender;
+    newSplitter.receiver0 = receiver0;
+    newSplitter.receiver1 = receiver1;
     newSplitter.isOpen = true;
     splitterStructs.push(newSplitter);
     return true;
@@ -38,7 +38,7 @@ contract SplitterHub {
     var splitterOwner = msg.sender;
     uint splitterCount = splitterStructs.length;
     for(uint i=0; i<splitterCount; i++) {
-      if(splitterStructs[i].owner == spliterOwner) {
+      if(splitterStructs[i].owner == splitterOwner) {
         if(!splitterStructs[i].isOpen) throw;
 
         if(msg.value < 2) throw;
@@ -64,9 +64,8 @@ contract SplitterHub {
     var splitterOwner = msg.sender;
     uint splitterCount = splitterStructs.length;
     for(uint i=0; i<splitterCount; i++) {
-      if(splitterStructs[i].owner == spliterOwner) {
-        return splitterStructs[i].receiver0.send(amount) &&
-          splitterStructs[i].isOpen = false;
+      if(splitterStructs[i].owner == splitterOwner) {
+        return splitterStructs[i].isOpen = false;
       }
     }
     throw;
