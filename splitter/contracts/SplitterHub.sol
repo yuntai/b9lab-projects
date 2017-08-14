@@ -80,5 +80,8 @@ contract SplitterHub {
     if(msg.sender != owner) throw;
     suicide(owner);
   }
+
+  // add fallback function
+  function() payable { }
 }
 
