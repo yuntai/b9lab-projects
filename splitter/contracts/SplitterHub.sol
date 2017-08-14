@@ -21,6 +21,11 @@ contract SplitterHub {
     public
     returns(bool success) 
   {
+    // https://ethereum.stackexchange.com/questions/6756/ways-to-see-if-address-is-empty
+    if(receiver0 == address(0) || receiver1 == address(0)) {
+      throw;
+    }
+
     SplitterStruct memory newSplitter;
     newSplitter.owner = msg.sender;
     newSplitter.receiver0 = receiver0;

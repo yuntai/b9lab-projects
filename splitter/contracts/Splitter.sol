@@ -9,6 +9,11 @@ contract Splitter {
   function Splitter(address _bob, address _carol) {
     owner = msg.sender;
 
+    // https://ethereum.stackexchange.com/questions/6756/ways-to-see-if-address-is-empty
+    if(_bob == address(0) || _carol == address(0)) {
+      throw;
+    }
+
     bob = _bob;
     carol = _carol;
   }
