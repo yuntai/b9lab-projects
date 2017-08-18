@@ -4,8 +4,8 @@ contract Splitter {
   address public owner;
 
   struct WithdrawalStruct {
-    uint balance;
-    bool amountWithdrawn;
+    uint amountSent;
+    uint amountWithdrawn;
   }
 
   mapping(address => WithdrawalStruct) public withdrawalStructs;
@@ -23,7 +23,6 @@ contract Splitter {
     payable
     returns(bool success)
   {
-
     if(_receiver0 == address(0) || _receiver1 == address(0)) {
       throw;
     }
@@ -33,15 +32,15 @@ contract Splitter {
     var amount = msg.value/2;
 
     if(amount * 2 > msg.value) {
-      withdrawalStructs[msg.sender].balance += 1
+      withdrawalStructs[msg.sender].amountSent += 1;
     }
 
-    withdrawalAmount[_receiver0].balance += amount;
-    withdrawalAmount[_receiver1].balance += amount;
+    withdrawalStructs[_receiver0].amountSent += amount;
+    withdrawalStructs[_receiver1].amountSent += amount;
 
     LogSplitSent(msg.sender, _receiver0, _receiver1, msg.value);
 
-    return true
+    return true;
   }
 
   function kill() public {
@@ -49,11 +48,20 @@ contract Splitter {
     suicide(owner);
   }
 
+  function withdrawalAmount(address withdrawer)
+    public
+    constant
+    returns(uint amount)
+  {
+    return withdrawalStructs[withdrawer].amountSent -
+      withdrawalStructs[withdrawer].amountWithdrawn;
+  }
+
   function withdraw() 
     public
     returns(bool success)
   {
-    uint amountOwed = withdrawalStructs[msg.sender].balance -
+    uint amountOwed = withdrawalStructs[msg.sender].amountSent -
       withdrawalStructs[msg.sender].amountWithdrawn;
     if(amountOwed == 0) throw;
     withdrawalStructs[msg.sender].amountWithdrawn += amountOwed;
