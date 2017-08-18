@@ -6,3 +6,4 @@
 - what happens transaction failed?
 - return value of addr.send()
 - gas price calculation?
+- Event log when throw

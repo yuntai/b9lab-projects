@@ -6,14 +6,16 @@ contract Campaign {
   uint    public deadline;
   uint    public goal;
   uint    public fundsRaised;
-  bool    public isOpen;
 
   struct FunderStruct {
-    address funder;
-    uint    amount;
+    uint    amountContributed;
+    uint    amountRefunded;
   }
 
-  FunderStruct[] public funderStructs;
+  mapping (address => FunderStruct) public funderStructs;
+
+  event LogContribution(address sender, uint amount);
+  event LogRefundSent(address funder,
 
   function Campaign(uint duration, uint _goal) {
     owner = msg.sender;
@@ -60,12 +62,11 @@ contract Campaign {
   {
     if(msg.value == 0) throw;
     fundsRaised += msg.value;
-    FunderStruct memory newFunder;
-    newFunder.funder = msg.sender;
-    newFunder.amount = msg.value;
-    funderStructs.push(newFunder);
+    funderStructs[msg.sender].amount += msg.value;
+    LogContribution(msg.sender, msg.value);
     return true;
   }
+
 
   function withdrawFunds() 
     public 
@@ -78,18 +79,28 @@ contract Campaign {
     return true;
   }
 
-  function sendRefunds() 
-    public 
+
+  // after the campaing is finished the owner may not send refund
+  // the owner can't send refund (lost private key)
+  // funder.send may keep failing preventing the sends to be returned
+
+
+  // rules
+  // for loop => pushed to client
+  // loopy logic out of the contract
+  function requestRefund()
+    public
     returns(bool success) 
   {
-    if(msg.sender != owner) throw;
+    uint amountOwed = funderStructs[msg.sender].amount -
+      funderStructs[msg.sender].amountRefunded;
+    if(amountOwed == 0) throw;
     if(!hasFailed()) throw;
-
-    uint funderCount = funderStructs.length;
-    for(uint i=0; i<funderCount; i++) {
-      funderStructs[i].funder.send(funderStructs[i].amount);
-    }
+    funderStructs[msg.sender].amountRefunded += amountOwed;
+    if(!msg.sender.send(amountOwed)) throw;
+    LogRefundSent(msg.sender, amountOwed);
     return true;
   }
+
 }
 
