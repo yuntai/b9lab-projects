@@ -7,7 +7,7 @@ contract Campaign is Stoppable {
   address public sponsor;
   uint public deadline;
   uint public goal;
-  uint public fundRaised;
+  uint public fundsRaised;
   uint public withdrawn;
 
   struct FunderStruct {
@@ -37,7 +37,7 @@ contract Campaign is Stoppable {
     constant
     returns(bool isIndeed)
   {
-    return(fundRaised >= goal);
+    return(fundsRaised >= goal);
   }
 
   function hasFailed()
@@ -45,7 +45,7 @@ contract Campaign is Stoppable {
     constant
     returns(bool hasIndeed)
   {
-    return(fundRaised < goal && block.number > deadline);
+    return(fundsRaised < goal && block.number > deadline);
   }
 
   function contribute()
@@ -56,7 +56,7 @@ contract Campaign is Stoppable {
   {
     require(msg.value != 0 && !isSuccess() && !hasFailed());
 
-    fundRaised += msg.value;
+    fundsRaised += msg.value;
     funderStructs[msg.sender].amountContributed += msg.value;
     LogContribution(msg.sender, msg.value);
     return true;
@@ -70,7 +70,7 @@ contract Campaign is Stoppable {
   {
     require(isSuccess());
     // this.balance uncomfortable
-    uint amount = fundRaised - withdrawn;
+    uint amount = fundsRaised - withdrawn;
     withdrawn += amount;
     owner.transfer(amount);
     LogWithdrawal(owner, amount);
