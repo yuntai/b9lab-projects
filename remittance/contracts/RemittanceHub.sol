@@ -5,18 +5,19 @@ contract RemittanceHub {
 	uint		public durationLimit;
   uint    public smallCut;
 
-  struct RemittanceStruct {
+  struct Remittance {
     address sender;
     address exchangeAddress;
     address receiver;
     uint sendAmount;
     uint deadline;
     uint amount;
-    string pwHash;
+    string pwHash1;
+    string pwHash2;
     bool isPaidout;
   }
 
-  RemittanceStruct[] public remittanceStructs;
+  mapping(string => Remittance) public remittances;
 
   function RemittanceHub(uint _durationLimit, uint _smallCut) {
     owner = msg.sender;
@@ -25,24 +26,26 @@ contract RemittanceHub {
   }
 
   function addRemittance(address _exchangeAddress, address _receiver, 
-                         string _pwHash, uint _duration)
+                         string _pwHash1, string _pwHash2, uint _duration)
     public
     payable
     returns (bool success) 
   {
     // check deadline limit
     if(_duration > durationLimit) throw;
+
     // need to deposit some amount 
     if(msg.value <= smallCut) throw;
 
-    RemittanceStruct memory newRemittance;
-    newRemittance.sender = msg.sender;
-    newRemittance.exchangeAddress = _exchangeAddress;
-    newRemittance.receiver = _receiver;
-    newRemittance.deadline = block.number + _duration;
-    newRemittance.isPaidout = false;
-    newRemittance.pwHash = _pwHash;
-    newRemittance.amount = msg.value - smallCut;
+    bytes32 key = keccak256(_pwHash1, _pwHash2);
+
+    remittances[key].sender = msg.sender;
+    remittances[key].exchangeAddress = _exchangeAddress;
+    remittances[key].receiver = _receiver;
+    remittances[key].deadline = block.number + _duration;
+    remittances[key].isPaidout = false;
+    remittances[key].amount = msg.value - smallCut;
+
     return true;
   }
 
@@ -52,7 +55,8 @@ contract RemittanceHub {
     return a == b;
   }
 
-  function remit(address sender, address receiver, string pw)
+  function remit(address sender, address receiver, string pwHash1, string
+                pwHash2)
   public
   returns(bool success)
   {

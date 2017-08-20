@@ -1,50 +1,43 @@
-pragma solidity ^0.4.6;
+pragma solidity ^0.4.0;
 
-contract Campaign {
-  
-  address public owner;
-  uint    public deadline;
-  uint    public goal;
-  uint    public fundsRaised;
+import "./Owned.sol";
+import "./Stoppable.sol";
+
+contract Campaign is Stoppable {
+  address public sponsor;
+  uint public deadline;
+  uint public goal;
+  uint public fundRaised;
+  uint public withdrawn;
 
   struct FunderStruct {
-    uint    amountContributed;
-    uint    amountRefunded;
+    uint amountContributed;
+    uint amountRefunded;
   }
 
   mapping (address => FunderStruct) public funderStructs;
 
-  event LogContribution(address sender, uint amount);
-  event LogRefundSent(address funder,
-
-  function Campaign(uint duration, uint _goal) {
-    owner = msg.sender;
-    deadline = block.number + duration;
-    goal = _goal;
-    isOpen = true;
+  modifier onlySponsor {
+      require(msg.sender != sponsor);
+      _;
   }
+  event LogContribution(address sender, uint amount);
+  event LogRefundSent(address funder, uint amount);
+  event LogWithdrawal(address beneficiary, uint amount);
 
-  function contributionAmount(address funder)
-    public
-    constant
-    returns(uint amount)
-  {
-    if(msg.sender != owner) throw;
-    uint funderCount = funderStructs.length;
-    for(uint i=0; i<funderCount; i++) {
-      if(funderStructs[i].funder == funder) {
-        return funderStructs[i].amount;
-      }
-    }
-    throw; // unknown funder
+  function Campaign(address campaignSponsor, uint campaignDuration, uint campaignGoal) {
+    sponsor = campaignSponsor;
+    deadline = block.number + campaignDuration;
+    goal = campaignGoal;
+    running = true;
   }
 
   function isSuccess()
-    public
+    public 
     constant
     returns(bool isIndeed)
   {
-    return(fundsRaised >= goal);
+    return(fundRaised >= goal);
   }
 
   function hasFailed()
@@ -52,55 +45,49 @@ contract Campaign {
     constant
     returns(bool hasIndeed)
   {
-    return(fundsRaised < goal && block.number > deadline);
+    return(fundRaised < goal && block.number > deadline);
   }
 
   function contribute()
     public
+    onlyIfRunning
     payable
     returns(bool success)
   {
-    if(msg.value == 0) throw;
-    fundsRaised += msg.value;
-    funderStructs[msg.sender].amount += msg.value;
+    require(msg.value != 0 && !isSuccess() && !hasFailed());
+
+    fundRaised += msg.value;
+    funderStructs[msg.sender].amountContributed += msg.value;
     LogContribution(msg.sender, msg.value);
     return true;
   }
 
-
-  function withdrawFunds() 
-    public 
-    returns(bool success) 
+  function withdrawFunds()
+    public
+    onlySponsor
+    onlyIfRunning
+    returns(bool success)
   {
-    if(msg.sender != owner) throw;
-    if(isSuccess()) throw;
-    uint amount = this.balance;
-    owner.send(amount);
+    require(isSuccess());
+    // this.balance uncomfortable
+    uint amount = fundRaised - withdrawn;
+    withdrawn += amount;
+    owner.transfer(amount);
+    LogWithdrawal(owner, amount);
     return true;
   }
 
-
-  // after the campaing is finished the owner may not send refund
-  // the owner can't send refund (lost private key)
-  // funder.send may keep failing preventing the sends to be returned
-
-
-  // rules
-  // for loop => pushed to client
-  // loopy logic out of the contract
   function requestRefund()
     public
-    returns(bool success) 
+    onlyIfRunning
+    returns(bool success)
   {
-    uint amountOwed = funderStructs[msg.sender].amount -
+    uint amountOwed = funderStructs[msg.sender].amountContributed -
       funderStructs[msg.sender].amountRefunded;
-    if(amountOwed == 0) throw;
-    if(!hasFailed()) throw;
+    require(amountOwed > 0 && hasFailed());
+
     funderStructs[msg.sender].amountRefunded += amountOwed;
-    if(!msg.sender.send(amountOwed)) throw;
-    LogRefundSent(msg.sender, amountOwed);
+    msg.sender.transfer(amountOwed);
     return true;
   }
-
 }
-
