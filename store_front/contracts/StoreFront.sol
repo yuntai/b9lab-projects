@@ -109,6 +109,7 @@ contract StoreFront {
     require(coPurchaseExists[coPurchaseId]);
     require(!coPurchases[coPurchaseId].completed);
     require(coPurchases[coPurchaseId].deadline > block.number);
+
     uint amountToSend = balances[msg.sender];
   }
 
