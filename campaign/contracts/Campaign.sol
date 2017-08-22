@@ -18,7 +18,7 @@ contract Campaign is Stoppable {
   mapping (address => FunderStruct) public funderStructs;
 
   modifier onlySponsor {
-      require(msg.sender != sponsor);
+      require(msg.sender == sponsor);
       _;
   }
   event LogContribution(address sender, uint amount);

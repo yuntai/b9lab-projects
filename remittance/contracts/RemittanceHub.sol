@@ -1,117 +1,159 @@
 pragma solidity ^0.4.4;
 
-contract RemittanceHub {
-  address public owner;
-	uint		public durationLimit;
-  uint    public smallCut;
+import "./Remittance.sol";
 
-  struct Remittance {
-    address sender;
-    address exchangeAddress;
-    address receiver;
-    uint sendAmount;
-    uint deadline;
-    uint amount;
-    string pwHash1;
-    string pwHash2;
-    bool isPaidout;
-  }
 
-  mapping(string => Remittance) public remittances;
+/*
+Alice parepaes two password password1 & password2
+and hash them = h1 = H(passsword1) h2 = H(password2)
 
-  function RemittanceHub(uint _durationLimit, uint _smallCut) {
-    owner = msg.sender;
-    durationLimit = _durationLimit;
-    smallCut = _smallCut;
-  }
+(createing remittance contract)
+Alice --- createRemittance(h1, h2, exchange) ---> RemittanceHub
+      <------- aRemittance ------
 
-  function addRemittance(address _exchangeAddress, address _receiver, 
-                         string _pwHash1, string _pwHash2, uint _duration)
+(Alice fund the contract, timer starts)
+Alice ---- fund() ----> aRemittance
+
+(off-chain)
+Alice ---- aRemittance, password1 ---> exchange
+Alice ---- password2              ---> bob
+
+Upon confirming aRemittance funded, exchange arranges the meeting with bob
+
+exchange ---> claim(password1, password2) ----> aRemittance 
+(fund unlocked for exchange)
+
+(pull fund)
+exchange ---> claimFund()         ----> aRemittance
+         <-------- ether           -----
+
+*/
+
+contract RemittanceHub is Stoppable {
+
+  uint maxDuration; // maximum duration allowed
+  uint passwordDuration; 
+  uint fee;         // fee for the hub
+
+  address[] public remitances;
+  mapping(address => bool) remitanceExists;
+
+  struct PasswordSeenStruct {
+    bool isSeen;
+    uint timeout;
+  };
+
+  mapping(string => PasswordSeenStruct) passwordHashSeen;
+
+  function isPasswordHashSeen(string passwordHash)
     public
-    payable
-    returns (bool success) 
+    constant
+    returns(bool isSeen)
   {
-    // check deadline limit
-    if(_duration > durationLimit) throw;
+    if(passwordHashSeen[passwordHash].isSeen &&
+       passwordHashSeen[passwordHash].timeout > block.number)
+      passwordHashSeen[passwordHash].isSeen = false;
 
-    // need to deposit some amount 
-    if(msg.value <= smallCut) throw;
-
-    bytes32 key = keccak256(_pwHash1, _pwHash2);
-
-    remittances[key].sender = msg.sender;
-    remittances[key].exchangeAddress = _exchangeAddress;
-    remittances[key].receiver = _receiver;
-    remittances[key].deadline = block.number + _duration;
-    remittances[key].isPaidout = false;
-    remittances[key].amount = msg.value - smallCut;
-
-    return true;
+    return passwordHashSeen[passwordHash].isSeen = false;
   }
 
-  function stringsEqual(string _a, string _b) internal returns (bool) {
-    bytes memory a = bytes(_a);
-    bytes memory b = bytes(_b);
-    return a == b;
-  }
-
-  function remit(address sender, address receiver, string pwHash1, string
-                pwHash2)
-  public
-  returns(bool success)
+  function recordPasswordHash(string passwordHash)
+    public
+    returns(bool success)
   {
-    uint remittanceCount = remittanceStructs.length;
-    for(uint i=0; i<remittanceCount; i++) {
-      if( remittanceStructs[i].exchangeAddress == msg.sender &&
-          remittanceStructs[i].sender == sender &&
-          remittanceStructs[i].receiver == receiver &&
-          bytes(remittanceStructs[i].pwHash)  == keccak256(pw) &&
-          remittanceStructs[i].deadline < block.number &&
-          remittanceStructs[i].isPaidout == false 
-        ) {
-          if(msg.sender.send(remittanceStructs[i].amount)) {
-            remittanceStructs[i].isPaidout = true;
-          }
-      }
-    }
-    throw;
+    passwordHashSeen[passwordHash].isSeen = true;
+    passwordHashSeen[passwordHash].timeout = block.number + passwordDuration;
   }
 
-  function claim(address exchangeAddress, address receiver, string pw)
-  public
-  returns(bool success)
+  modifier onlyIfRemittance(address remittance) {
+    require(remitanceExists[remittance]);
+    _;
+  }
+
+  function RemittanceHub(_maxDuration, _fee, _passwordDuration) {
+    require(_maxDuration > 0 && _fee > 0);
+
+    maxDuration = _maxDuration;
+    fee = _fee;
+    passwordDuration = _passwordDuration;
+  }
+
+  function getRemittanceCount()
+    public
+    constant
+    returns(uint remittanceCount)
   {
-    uint remittanceCount = remittanceStructs.length;
-    for(uint i=0; i<remittanceCount; i++) {
-      if( remittanceStructs[i].exchangeAddress == exchangeAddress &&
-          remittanceStructs[i].sender == msg.sender &&
-          remittanceStructs[i].receiver == receiver &&
-          bytes(remittanceStructs[i].pwHash)  == keccak256(pw) &&
-          remittanceStructs[i].deadline >= block.number &&
-          remittanceStructs[i].isPaidout == false 
-        ) {
-          if(msg.sender.send(remittanceStructs[i].amount)) {
-            remittanceStructs[i].isPaidout = true;
-          }
-      }
-    }
-    throw;
+    return remittances.length;
   }
 
-	function killMe() returns (bool) {
-  	if (msg.sender == owner) {
-      uint remittanceCount = remittanceStructs.length;
-      for(uint i=0; i<remittanceCount; i++) {
-        if(remittanceStructs[i].isPaidout == false) {
-          if(msg.sender.send(remittanceStructs[i].amount)) {
-            remittanceStructs[i].isPaidout = true;
-          }
-        }
-      }
-    	suicide(owner);
-      return true;
-    }
+  // Alice create two password (password1, password2)
+  // create two hashes H(password1) and H(password2) and submit with
+  // createRemittance() request
+  // password1 and password2 are sent to exchange shop and reciever,
+  // respecitvely.
+  function createRemittance(uint amount, 
+                            uint duration, 
+                            address exchangeAddress, 
+                            string passwordHashKey1,
+                            string passwordHashKey2)
+    public
+    onlyIfRunning
+    returns(address remittanceContract)
+  {
+    require(exchangeAddress != address(0));
+    require(passwordHashKey1 != string(0));
+    require(passwordHashKey2 != string(0));
+    require(duration < maxDuration);
+    require(amount > 0 && msg.value > fee);
+    require(!isPasswordHashSeen(passwordHashKey1);
+    require(!isPasswordHashSeen(passwordHashKey2);
+
+    recordPassword(passwordHashKey1);
+    recordPassword(passwordHashKey2);
+
+    passwordHashKey = keccak256(passwordHashKey1, passwordHashKey2);
+
+    // contract unfunded 
+    Remittance trustedRemittance = new Remittance(
+      msg.sender, 
+      exchangeAddress,
+      passwordHashKey,
+      amount,
+      duration);
+
+    remittances[passwordHashKey] = trustedRemittance;
+    remitanceExists[trustedRemittance] = true;
+    LogNewRemittance(msg.sender, trustedRemittance, exchangeAddress, duration, amount);
+    return trustedRemittance;
+  }
+
+  function stopRemittance(address remitance)
+    public
+    onlyOwner
+    onlyIfRemittance(remittance)
+    returns(bool success)
+  {
+    Remittance trustedRemittance = Remittance(remittance);
+    return(trustedRemittance.runSwitch(false));
+  }
+
+  function startRemittance(address remitance)
+    public
+    onlyOwner
+    onlyIfRemittance(remittance)
+    returns(bool success)
+  {
+    Remittance trustedRemittance = Remittance(remittance);
+    return(trustedRemittance.runSwitch(true));
+  }
+
+	function killMe() 
+    public
+    onlyOwner
+    returns (bool) 
+  {
+    selfdestruct(owner);
 	}
 
-	function () payable {}
+	function () {}
 }
