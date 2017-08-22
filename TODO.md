@@ -1,9 +1,9 @@
 # TO LEARN
 - gas/ethereum
-- fallback
+- fallback x
 - code convention
 - variable visibility
-- what happens transaction failed?
-- return value of addr.send()
+- what happens transaction failed? x
+- return value of addr.send() (bool) x
 - gas price calculation?
-- Event log when throw
+- Event log when throw (EventLog not happens when a function trhows)
