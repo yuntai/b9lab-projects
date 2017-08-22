@@ -1,10 +1,14 @@
 pragma solidity ^0.4.4;
 
+import "./Owned.sol";
+
 contract Remittance is Owned {
   address sender;
   address exchange;
 
   uint deadline;
+  uint duration;
+  uint amount;
   string passwordHashKey;
 
   // possible state transitions
@@ -20,31 +24,33 @@ contract Remittance is Owned {
   modifier inState(State _state) { require(state == _state); _; }
 
   modifier checkExpiration() {
-    if((state == Funded || staet == Unlcoked) && block.number > deadline) {
-      state = Expired; 
+    if((state == State.Funded || state == State.Unlcoked) && block.number > deadline) {
+      state = State.Expired; 
     }
     _;
   }
 
-  event LogRemittance(address sender, uint amount);
-  event LogRefundSent(address sender, uint amount);
+  modifier onlySender() { require(msg.sender == sender); _; }
+  modifier onlyExchange() { require(msg.sender == exchange); _; }
+
+  event LogRefundSent(address _sender, uint _amount);
 
   function Remittance(
       address _sender,
       address _exchange, 
       string _passwordHashKey,
-      uint amount,
+      uint _amount,
       uint _duration) 
   {
-    require(_sender != address(0) && _exchange != address(0) 
-              && _receiver != address(0));
-    require(bytes(_passwordHashKey).length > 0)
-    require(msg.value > 0 && amount > 0 && msg.value > amount && _duration > 0);
+    require(_sender != address(0) && _exchange != address(0));
+    require(bytes(_passwordHashKey).length > 0);
+    require(msg.value > 0 && amount > 0 && msg.value > _amount && _duration > 0);
 
     sender = _sender;
     exchange = _exchange;
-    receiver = _receiver;
     passwordHashKey = _passwordHashKey;
+    amount = _amount;
+    duration = _duration;
   }
 
   // fund contract
@@ -52,13 +58,13 @@ contract Remittance is Owned {
     public 
     payable 
     onlySender
-    inState(Initial)
+    inState(State.Initial)
     returns(bool success)
   {
     require(msg.value > amount);
-    state = Funded;
+    state = State.Funded;
     // time ticks only after the contract is funded
-    deadline = block.number + _duration;
+    deadline = block.number + duration;
     return true; 
   }
 
@@ -66,11 +72,11 @@ contract Remittance is Owned {
     public
     onlyExchange
     checkExpiration
-    inState(Funded)
+    inState(State.Funded)
     returns(bool success)
   {
     if(keccak256(keccak256(passwordExchange), keccak256(passwordBeneficiary)) == passwordHashKey) {
-      state = Unlocked;
+      state = State.Unlocked;
       return true;
     }
     return false;
@@ -80,10 +86,10 @@ contract Remittance is Owned {
     public
     onlyExchange
     checkExpiration
-    inState(Unlocked)
+    inState(State.Unlocked)
     returns(bool success)
   {
-    state = Paidout; // should revert to Unlcoked when transfer throws
+    state = State.Paidout; // should revert to Unlcoked when transfer throws
     exchange.transfer(amount);
     return true;
   }
@@ -92,10 +98,10 @@ contract Remittance is Owned {
     public
     onlySender
     checkExpiration
-    inState(Expired)
+    inState(State.Expired)
     returns(bool success)
   {
-    state = Refunded;
+    state = State.Refunded;
     sender.transfer(this.balance);
     return true;
   }
@@ -104,7 +110,7 @@ contract Remittance is Owned {
     public
     onlyOwner
   {
-    require(state == Initial || state == Paidout || state == Refunded);
+    require(state == State.Initial || state == State.Paidout || state == State.Refunded);
     selfdestruct(sender);
   }
 

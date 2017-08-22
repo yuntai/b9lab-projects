@@ -1,7 +1,7 @@
 pragma solidity ^0.4.4;
 
 import "./Remittance.sol";
-
+import "./Stoppable.sol";
 
 /*
 Alice parepaes two password password1 & password2
@@ -35,13 +35,13 @@ contract RemittanceHub is Stoppable {
   uint passwordDuration; 
   uint fee;         // fee for the hub
 
-  address[] public remitances;
-  mapping(address => bool) remitanceExists;
+  address[] public remittances;
+  mapping(address => bool) remittanceExists;
 
   struct PasswordSeenStruct {
     bool isSeen;
     uint timeout;
-  };
+  }
 
   mapping(string => PasswordSeenStruct) passwordHashSeen;
 
@@ -66,15 +66,15 @@ contract RemittanceHub is Stoppable {
   }
 
   modifier onlyIfRemittance(address remittance) {
-    require(remitanceExists[remittance]);
+    require(remittanceExists[remittance]);
     _;
   }
 
-  function RemittanceHub(_maxDuration, _fee, _passwordDuration) {
-    require(_maxDuration > 0 && _fee > 0);
+  function RemittanceHub(uint _fee, uint _maxDuration, uint _passwordDuration) {
+    require(_maxDuration > 0 && _fee > 0 && _passwordDuration > 0);
 
-    maxDuration = _maxDuration;
     fee = _fee;
+    maxDuration = _maxDuration;
     passwordDuration = _passwordDuration;
   }
 
@@ -105,8 +105,8 @@ contract RemittanceHub is Stoppable {
     require(passwordHashKey2 != string(0));
     require(duration < maxDuration);
     require(amount > 0 && msg.value > fee);
-    require(!isPasswordHashSeen(passwordHashKey1);
-    require(!isPasswordHashSeen(passwordHashKey2);
+    require(!isPasswordHashSeen(passwordHashKey1));
+    require(!isPasswordHashSeen(passwordHashKey2));
 
     recordPassword(passwordHashKey1);
     recordPassword(passwordHashKey2);
@@ -122,12 +122,12 @@ contract RemittanceHub is Stoppable {
       duration);
 
     remittances[passwordHashKey] = trustedRemittance;
-    remitanceExists[trustedRemittance] = true;
+    remittanceExists[trustedRemittance] = true;
     LogNewRemittance(msg.sender, trustedRemittance, exchangeAddress, duration, amount);
     return trustedRemittance;
   }
 
-  function stopRemittance(address remitance)
+  function stopRemittance(address remittance)
     public
     onlyOwner
     onlyIfRemittance(remittance)
@@ -137,7 +137,7 @@ contract RemittanceHub is Stoppable {
     return(trustedRemittance.runSwitch(false));
   }
 
-  function startRemittance(address remitance)
+  function startRemittance(address remittance)
     public
     onlyOwner
     onlyIfRemittance(remittance)
