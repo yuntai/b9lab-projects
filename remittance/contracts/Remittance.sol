@@ -1,15 +1,20 @@
 pragma solidity ^0.4.4;
 
-import "./Owned.sol";
+import "./Stoppable.sol";
 
-contract Remittance is Owned {
+contract Remittance is Stoppable {
   address sender;
   address exchange;
 
   uint deadline;
   uint duration;
   uint amount;
-  string passwordHashKey;
+  bytes32 passwordHashKey;
+
+  bool feeClaimed = false;
+  /* fee is filled when sender calls remitFund() and claimed by the
+     owner with claimFee() */
+  uint fee;
 
   // possible state transitions
 
@@ -24,7 +29,7 @@ contract Remittance is Owned {
   modifier inState(State _state) { require(state == _state); _; }
 
   modifier checkExpiration() {
-    if((state == State.Funded || state == State.Unlcoked) && block.number > deadline) {
+    if((state == State.Funded || state == State.Unlocked) && block.number > deadline) {
       state = State.Expired; 
     }
     _;
@@ -38,19 +43,21 @@ contract Remittance is Owned {
   function Remittance(
       address _sender,
       address _exchange, 
-      string _passwordHashKey,
+      bytes32 _passwordHashKey,
       uint _amount,
-      uint _duration) 
+      uint _duration,
+      uint _fee) 
   {
     require(_sender != address(0) && _exchange != address(0));
-    require(bytes(_passwordHashKey).length > 0);
-    require(msg.value > 0 && amount > 0 && msg.value > _amount && _duration > 0);
+    require(_passwordHashKey.length > 0);
+    require(amount > 0 && _duration > 0);
 
     sender = _sender;
     exchange = _exchange;
     passwordHashKey = _passwordHashKey;
     amount = _amount;
     duration = _duration;
+    fee = _fee;
   }
 
   // fund contract
@@ -61,7 +68,7 @@ contract Remittance is Owned {
     inState(State.Initial)
     returns(bool success)
   {
-    require(msg.value > amount);
+    require(msg.value > amount + fee);
     state = State.Funded;
     // time ticks only after the contract is funded
     deadline = block.number + duration;
@@ -94,6 +101,18 @@ contract Remittance is Owned {
     return true;
   }
 
+  function claimFee()
+    public
+    onlyOwner
+    returns(bool success)
+  {
+    require(state >= State.Funded);
+    require(!feeClaimed);
+    feeClaimed = true;
+    owner.transfer(fee);
+    return true;
+  }
+
   function refund()
     public
     onlySender
@@ -111,7 +130,7 @@ contract Remittance is Owned {
     onlyOwner
   {
     require(state == State.Initial || state == State.Paidout || state == State.Refunded);
-    selfdestruct(sender);
+    selfdestruct(owner);
   }
 
 	function () public {}

@@ -38,6 +38,8 @@ contract RemittanceHub is Stoppable {
   address[] public remittances;
   mapping(address => bool) remittanceExists;
 
+  event LogNewRemittance(address _sender, address _remittance, address _exchange, uint _duration, uint _amount);
+
   struct PasswordSeenStruct {
     bool isSeen;
     uint timeout;
@@ -63,6 +65,7 @@ contract RemittanceHub is Stoppable {
   {
     passwordHashSeen[passwordHash].isSeen = true;
     passwordHashSeen[passwordHash].timeout = block.number + passwordDuration;
+    return true;
   }
 
   modifier onlyIfRemittance(address remittance) {
@@ -101,17 +104,17 @@ contract RemittanceHub is Stoppable {
     returns(address remittanceContract)
   {
     require(exchangeAddress != address(0));
-    require(passwordHashKey1 != string(0));
-    require(passwordHashKey2 != string(0));
+    require(bytes(passwordHashKey1).length > 0);
+    require(bytes(passwordHashKey2).length > 0);
     require(duration < maxDuration);
-    require(amount > 0 && msg.value > fee);
+    require(amount > 0);
     require(!isPasswordHashSeen(passwordHashKey1));
     require(!isPasswordHashSeen(passwordHashKey2));
 
-    recordPassword(passwordHashKey1);
-    recordPassword(passwordHashKey2);
+    recordPasswordHash(passwordHashKey1);
+    recordPasswordHash(passwordHashKey2);
 
-    passwordHashKey = keccak256(passwordHashKey1, passwordHashKey2);
+    bytes32 passwordHashKey = keccak256(passwordHashKey1, passwordHashKey2);
 
     // contract unfunded 
     Remittance trustedRemittance = new Remittance(
@@ -119,9 +122,10 @@ contract RemittanceHub is Stoppable {
       exchangeAddress,
       passwordHashKey,
       amount,
-      duration);
+      duration,
+      fee);
 
-    remittances[passwordHashKey] = trustedRemittance;
+    remittances.push(trustedRemittance);
     remittanceExists[trustedRemittance] = true;
     LogNewRemittance(msg.sender, trustedRemittance, exchangeAddress, duration, amount);
     return trustedRemittance;
