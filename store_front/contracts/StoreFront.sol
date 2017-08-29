@@ -1,57 +1,59 @@
 pragma solidity ^0.4.4;
 
-contract StoreFront {
-  address owner;
-  address administrator;
+contract StoreFront is Admined {
 
   struct Product {
-    uint id;
     uint price;
     uint stock;
   }
 
-  struct Sales {
+  struct Sale {
     uint productId;
     uint blockNumber
+    bytes20 purchaseId;
   }
 
-  struct CoPurchase {
+  struct Purchase {
     uint productId,
-    address buyer0,
-    address buyer1,
+    address[] buyers,
     uint deadLine,
-    bool completed,
-    uint blockNumber
+    bool isCompleted,
+    uint blockNumber,
+    mapping(address=>uint) balances;
+    mapping(address=>bool) paid;
   }
 
-  mapping products public (uint => Product);
-  mapping productExists public (uint => bool);
+  mapping(uint => Product) public products;
+  Sales[] public sales;
+  mapping(bytes20 => Purchase) public purchases;
 
-  mapping salesRecord public (address => Sales[]);
-  mapping coPurchases public (bytes20 => CoPurchase);
+  event LogAddProduct(address _sender, uint _productId, uint _price, uint _stock);
 
-  uint revenue = 0;
-
-  function StoreFront() {
-    owner = msg.sender;
-  }
-
-  function addProduct(uint id, uint price, uint stock) 
+  function addProduct(uint productId, uint price, uint stock) 
     public
-    onlyAdministrator
-    ifProductNotExists
+    onlyAdmin
     returns(bool success)
   {
-    LogAddProduct(msg.sender, id, price, stock);
+    LogAddProduct(msg.sender, productId, price, stock);
 
-    products[id].id = id;
-    products[id].price = price;
-    products[id].stock = stock;
+    products[productId].price = price;
+    products[productId].stock += stock;
 
     return true;
   }
 
-  function purchase(uint id) 
+  function removeProduct(uint productId)
+    public
+    onlyAdmin
+    returns(bool success)
+  {
+    LogRemoveProduct(msg.sender, productId);
+
+    require(products[productId].stock > 0);
+    products[productId].stock = 0;
+  }
+
+  function purchase(uint productId) 
     public
     payable
     ifProductExists
@@ -78,7 +80,7 @@ contract StoreFront {
     }
   }
 
-  function coPurchaseInitiate(uint productId, address other) 
+  function coPurchaseInitiate(uint productId, address [] others) 
     public
     payable
     ifProductExists
@@ -87,19 +89,52 @@ contract StoreFront {
     LogCoPurchase(msg.sender, id);
 
     require(products[id].stock > 0);
-    require(msg.value > products[id].price/2);
 
-    bytes20 coPurchaseId = generateCoPurchaseId(productId, msg.sender, other);
+    uint numPurchasers = 1 + others.length;
+    require(numPurchasers <= COPURCHASE_LIMIT);
+
+    require(msg.value > products[id].price/numPurchasers);
+
+    bytes20 coPurchaseId = generateCoPurchaseId(productId, msg.sender, others);
+
     products[id].stock -= 1;
 
-    coPurchases[coPurchaseId].buyer0 = msg.sender;
-    coPurchases[coPurchaseId].buyer1 = other;
-    coPurchases[coPurchaseId].productId = id;
+    mapping addressSeen (address => bool);
+
+    coPurchases[coPurchaseId].purchasers[msg.sender] = true;
+    addressSeen[msg.sender] = true;
+
+    for(uint i=0;i < others.length; i++) {
+      require(!addressSeen[others[i]);
+      coPurchases[coPurchaseId].purchasers[others[i]] = false;
+      addressSeen[others[i]] = true;
+    }
+
+    coPurchases[coPurchaseId].productId = productId;
     coPurchases[coPurchaseId].deadline = block.number + duration;
-    coPurchases[coPurchaseId].completed = false;
+    coPurchases[coPurchaseId].numPaid = 1;
     coPurchases[coPurchaseId].blockNumber = block.number;
 
-    balances[msg.sender] += msg.value;
+    buyerBalances[msg.sender] += msg.value;
+  }
+
+  function coPurchasePay(coPurchaseId)
+    public
+    payable
+    ifProductExists
+    returns(bool success) 
+  {
+    require(coPurchaseExists[coPurchaseId]);
+    require(!coPurchases[coPurchaseId].completed);
+    require(coPurchases[coPurchaseId].deadline <= block.number);
+    uint productId = coPurchases[coPurchaseId].productId;
+    require(msg.value > products[productId].price/2);
+    coPurchases[coPurchaseId].completed = true;
+
+    Sales memory s = new Sales(id, price, 1);
+    salesRecord[msg.sender].push(s);
+
+    balances[coPurchases[coPurchaseId].buyer0] = 0;
   }
 
   function coPurchaseRefund(coPurchaseId)
@@ -109,24 +144,38 @@ contract StoreFront {
     require(coPurchaseExists[coPurchaseId]);
     require(!coPurchases[coPurchaseId].completed);
     require(coPurchases[coPurchaseId].deadline > block.number);
+    require(customerBalances[msg.sender] > 0);
 
-    uint amountToSend = balances[msg.sender];
+    uint amountToSend = customerBalances[msg.sender];
+    balances[msgs.sender] = 0;
+
+    msg.sender.transfer(amountToSend);
+    return true;
   }
 
-  function coPurchaseComplete(coPurchaseId)
+  function deposit()
     public
     payable
-    returns(bool success) 
+    onlyOwner
+    returns(bool)
   {
-    require(coPurchaseExists[coPurchaseId]);
-    require(!coPurchases[coPurchaseId].completed);
-    require(coPurchases[coPurchaseId].deadline <= block.number);
-    require(msg.value > products[id].price/2);
-    coPurchases[coPurchaseId].completed = true;
+    return true;
+  }
 
-    Sales memory s = new Sales(id, price, 1);
-    salesRecord[msg.sender].push(s);
+  function withdraw(uint amount)
+    public
+    onlyOwner
+    returns(bool)
+  {
+    require(amount < this.balance);
+    owner.transfer(amount);
+    return true;
+  }
 
-    balances[coPurchases[coPurchaseId].buyer0] = 0;
+  function shutdown()
+    public
+    onlyOwner
+  {
+    selfdestruct(owner);
   }
 }
