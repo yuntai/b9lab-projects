@@ -14,14 +14,14 @@ contract Admined {
     _;
   }
 
-  function Admined(address admin) {
-    require(admin != address(0));
+  function Admined(address _admin) {
+    require(_admin != address(0));
     owner = msg.sender;
   }
 
   function changeAdmin(address newAdmin) 
     public
-    ownerOnly
+    onlyOwner
   {
     admin = newAdmin;
   }
