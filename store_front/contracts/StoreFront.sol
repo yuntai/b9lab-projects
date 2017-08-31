@@ -6,7 +6,6 @@ contract StoreFront is Admined {
   struct Product {
     uint price;
     uint stock;
-    string sku;
   }
 
   struct CoPurchase {
@@ -135,33 +134,49 @@ contract StoreFront is Admined {
     uint numPurchasers = 1 + others.length;
     require(numPurchasers <= coPurchaseLimit);
 
-    //TODO: split logic
-    var totalPrice = products[productId].price * numItems;
-    require(msg.value > totalPrice/numPurchasers);
+    // small discount with assumption that coPurchaseLimit is a resonably small number
+    var totalPrice = ((products[productId].price * numItems)/numPurchasers) * numPurchasers;
+    var discount = products[productId].price * numItems - totalPrice;
+    var pricePerPurchaser = totalPrice/numPurchasers;
+
+    require(msg.value > pricePerPurchaser);
 
     products[productId].stock -= numItems;
 
     bytes20 coPurchaseId = generateCoPurchaseId(productId, msg.sender, others);
 
+    others.push(msg.sender);
+
     var coPurchase = coPurchases[coPurchaseId];
+
     coPurchase.purchasers             = others;
-    coPurchase.purchasers.push(msg.sender);
     coPurchase.numPaid                = 1;
     coPurchase.productId              = productId;
     coPurchase.deadlineHour           = currentHour() + 1 + hourLimit;
     coPurchase.blockNumber            = block.number;
     coPurchase.balances[msg.sender]  += msg.value;
     coPurchase.completed              = false;
+
     coPurchase.totalPrice             = totalPrice;
+    coPurchase.pricePerPurchaser      = pricePerPurchaser;
+    coPurchase.totalBalance          += msg.value;
+    coPurchase.discount               = discount;
 
     coPurchasePendingBalance += msg.value;
 
     LogCoPurchase(msg.sender, numItems, others);
   }
 
+  modifier ifCoPurchaseExists(coPurchaseId) {} 
+  modifier ifCoPurchaseExpired(coPurchaseId) {} 
+  modifier ifCoPurchaseCompleted(coPurchaseId) {} 
+
   function coPurchasePay(coPurchaseId)
     public
     payable
+    coPurchaseExists(coPurchaseId)
+    coPurchaseExpired(coPurchaseId)
+    coPurchaseCompleted(coPurchaseId)
     returns(bool success) 
   {
     require(coPurchaseExists[coPurchaseId]);
@@ -171,23 +186,28 @@ contract StoreFront is Admined {
     var coPurchase = coPurchases[coPurchaseId];
 
     //TODO: 1/N problem
-    require(msg.value >
-            products[coPurchase.productId].price/coPurchases.numPurchasers);
+    require(msg.value > coPurchase.pricePerPurchaser);
+
     coPurchase.numPaid += 1;
+    coPurchases[coPurchaseId].balances[msg.sender] += msg.value;
+    coPurchases[coPurchaseId].totalBalance += msg.value;
+    coPurchasePendingBalance += msg.value;
+
+    //TODO: assert
 
     if(coPurchases.numPaid == coPurchases.purchasers.length) {
       coPurchases.completed = true;
-      delete coPurchases[coPurchaseId]; //TODO: does it delete entry?
-      for(uint i=0;i<coPurchases.purchasers.length;i++) {
+      for(uint i = 0; i<coPurchases.purchasers.length; i++) {
+        var change = coPurchases.balances[coPurchase.purchasers[i]] - coPurchase.pricePerPurchaser;
+        if(change > 0) {
+          storeCredit[coPurchases.purchasers[i]] += change;
+        }
         coPurchases.balances[coPurchase.purchasers[i]] = 0;
       }
-      coPurchasePendingBalance -= coPurchases.totalPrice;
+      coPurchasePendingBalance -= coPurchases.totalBalance;
       storeBalance += coPurchases.totalPrice;
+      //TODO: assert
       LogCoPurchaseDone();
-    }
-    else {
-      coPurchases[coPurchaseId].balances[msg.sender] += msg.value;
-      coPurchasePendingBalance += msg.value;
     }
   }
 
@@ -210,6 +230,17 @@ contract StoreFront is Admined {
     return true;
   }
 
+  function withdrawCreditRefund()
+    public
+    returns(bool) 
+  {
+    require(storeCredit[msg.sender] > 0);
+    var amount = storeCredit[msg.sender];
+    storeCredit[msg.sender] = 0;
+    msg.send.transfer(amount);
+    return true;
+  }
+
   function deposit()
     public
     payable
@@ -224,7 +255,7 @@ contract StoreFront is Admined {
     returns(bool)
   {
     // only available coPurchasePending balance
-    // understnd reentry attach again
+    //TODO: understnd reentry attach again
     // this.balance changes before owner.transfer?
     require(amount < storeBalance - coPurchasePendingBalance);
     storeBalance -= amount;

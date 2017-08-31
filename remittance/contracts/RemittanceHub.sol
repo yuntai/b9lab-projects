@@ -40,32 +40,30 @@ contract RemittanceHub is Stoppable {
 
   event LogNewRemittance(address _sender, address _remittance, address _exchange, uint _duration, uint _amount);
 
-  struct PasswordSeenStruct {
-    bool isSeen;
+  struct PasswordStruct {
+    bool exists;
     uint timeout;
   }
 
-  mapping(string => PasswordSeenStruct) passwordHashSeen;
+  mapping(string => PasswordStruct) passwordExist;
 
-  function isPasswordHashSeen(string passwordHash)
+  function isPasswordReused(string passwordHash)
     public
     constant
-    returns(bool isSeen)
+    returns(bool exists)
   {
-    if(passwordHashSeen[passwordHash].isSeen &&
+    if(passwordHashSeen[passwordHash].exists &&
        passwordHashSeen[passwordHash].timeout > block.number)
-      passwordHashSeen[passwordHash].isSeen = false;
+      passwordHashSeen[passwordHash].exists = false;
 
-    return passwordHashSeen[passwordHash].isSeen = false;
+    return passwordHashSeen[passwordHash].exists;
   }
 
   function recordPasswordHash(string passwordHash)
     public
-    returns(bool success)
   {
-    passwordHashSeen[passwordHash].isSeen = true;
+    passwordHashSeen[passwordHash].exists = true;
     passwordHashSeen[passwordHash].timeout = block.number + passwordDuration;
-    return true;
   }
 
   modifier onlyIfRemittance(address remittance) {
