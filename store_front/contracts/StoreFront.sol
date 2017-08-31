@@ -117,12 +117,12 @@ contract StoreFront is admined {
   event LogCoPayment(address _sender, address buyer, bytes32 _coPurchaseId, uint amount);
   event LogCoPurchaseComplete(address _sender, bytes32 _coPurchaseId);
 
-  event LogCoPurchaseRefund(address _sender, bytes32 _coPurchaseId);
+  event LogCoPurchaseRefund(address _sender, bytes32 _coPurchaseId, uint amount);
 
   event LogRefundCustomerCredit(address _sender, uint amount);
 
   event LogOwnerDeposit(address _sender, uint amount);
-  event LogOwnerWithdrawal(address _sender, uint amount);
+  event LogOwnerWithdraw(address _sender, uint amount);
 
   function StoreFront(address _admin,
                       uint _coPurchaseParticipantNumberLimit, 
@@ -327,7 +327,7 @@ contract StoreFront is admined {
     coPurchases[coPurchaseId].restocked = true;
     products[coPurchases[coPurchaseId].productId].stock += coPurchases[coPurchaseId].numItems;
     assert(products[coPurchases[coPurchaseId].productId].coPurchasePendingCount > 0);
-    products[coPurchases[coPurchaseId].productId].coPurchasePending -= 1;
+    products[coPurchases[coPurchaseId].productId].coPurchasePendingCount -= 1;
 
     return true;
   }
