@@ -49,7 +49,6 @@ contract Remittance is Stoppable {
       uint _fee) 
   {
     require(_sender != address(0) && _exchange != address(0));
-    require(_passwordHashKey.length > 0);
     require(amount > 0 && _duration > 0);
 
     sender = _sender;
@@ -75,7 +74,7 @@ contract Remittance is Stoppable {
     return true; 
   }
 
-  function unlockFund(string passwordExchange, string passwordBeneficiary) 
+  function unlockFund(bytes32 passwordExchange, bytes32 passwordBeneficiary) 
     public
     onlyExchange
     checkExpiration
@@ -86,7 +85,7 @@ contract Remittance is Stoppable {
       state = State.Unlocked;
       return true;
     }
-    return false;
+    revert();
   }
 
   function claimFund()

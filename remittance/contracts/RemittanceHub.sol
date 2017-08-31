@@ -45,25 +45,25 @@ contract RemittanceHub is Stoppable {
     uint timeout;
   }
 
-  mapping(string => PasswordStruct) passwordExist;
+  mapping(bytes32 => PasswordStruct) passwordExists;
 
-  function isPasswordReused(string passwordHash)
+  function isPasswordReused(bytes32 passwordHash)
     public
     constant
     returns(bool exists)
   {
-    if(passwordHashSeen[passwordHash].exists &&
-       passwordHashSeen[passwordHash].timeout > block.number)
-      passwordHashSeen[passwordHash].exists = false;
+    if(passwordExists[passwordHash].exists &&
+       passwordExists[passwordHash].timeout > block.number)
+      passwordExists[passwordHash].exists = false;
 
-    return passwordHashSeen[passwordHash].exists;
+    return passwordExists[passwordHash].exists;
   }
 
-  function recordPasswordHash(string passwordHash)
+  function recordPasswordHash(bytes32 passwordHash)
     public
   {
-    passwordHashSeen[passwordHash].exists = true;
-    passwordHashSeen[passwordHash].timeout = block.number + passwordDuration;
+    passwordExists[passwordHash].exists = true;
+    passwordExists[passwordHash].timeout = block.number + passwordDuration;
   }
 
   modifier onlyIfRemittance(address remittance) {
@@ -95,19 +95,19 @@ contract RemittanceHub is Stoppable {
   function createRemittance(uint amount, 
                             uint duration, 
                             address exchangeAddress, 
-                            string passwordHashKey1,
-                            string passwordHashKey2)
+                            bytes32 passwordHashKey1,
+                            bytes32 passwordHashKey2)
     public
     onlyIfRunning
     returns(address remittanceContract)
   {
     require(exchangeAddress != address(0));
-    require(bytes(passwordHashKey1).length > 0);
-    require(bytes(passwordHashKey2).length > 0);
+    require(passwordHashKey1.length > 0);
+    require(passwordHashKey2.length > 0);
     require(duration < maxDuration);
     require(amount > 0);
-    require(!isPasswordHashSeen(passwordHashKey1));
-    require(!isPasswordHashSeen(passwordHashKey2));
+    require(!isPasswordReused(passwordHashKey1));
+    require(!isPasswordReused(passwordHashKey2));
 
     recordPasswordHash(passwordHashKey1);
     recordPasswordHash(passwordHashKey2);
