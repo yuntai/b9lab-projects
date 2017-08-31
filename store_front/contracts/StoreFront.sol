@@ -32,6 +32,7 @@ contract StoreFront is admined {
     bool exists;
     uint price;
     uint stock;
+    uint coPurchasePendingCount; // number of copurchase opened
   }
 
   struct CoPurchaserStruct {
@@ -109,15 +110,19 @@ contract StoreFront is admined {
   }
 
   event LogAddProduct(address _sender, bytes32 _productId, uint _price, uint _stock);
-  event LogRemoveProduct(address _sender, bytes32 _productId, uint _price, uint _stock);
+  event LogRemoveProduct(address _sender, bytes32 _productId);
 
   event LogPurchase(address _sender, bytes32 _productId, uint _numItems, address purchaser);
-  event LogCoPurchaseOpen(address _sender, bytes32 _coPurchaseId, bytes32 _productId, uint numItems, address[] _purchasers, uint amount);
-  event LogCoPayment(address _sender, bytes32 _coPurchaseId);
+  event LogCoPurchaseOpen(address _sender, bytes32 _coPurchaseId, bytes32 _productId, uint numItems, address[] _purchasers, uint totalPrice);
+  event LogCoPayment(address _sender, address buyer, bytes32 _coPurchaseId, uint amount);
   event LogCoPurchaseComplete(address _sender, bytes32 _coPurchaseId);
 
-  event LogCoPurchaseExpired(address _sender, bytes32 _coPurchaseId);
   event LogCoPurchaseRefund(address _sender, bytes32 _coPurchaseId);
+
+  event LogRefundCustomerCredit(address _sender, uint amount);
+
+  event LogOwnerDeposit(address _sender, uint amount);
+  event LogOwnerWithdrawal(address _sender, uint amount);
 
   function StoreFront(address _admin,
                       uint _coPurchaseParticipantNumberLimit, 
@@ -152,7 +157,6 @@ contract StoreFront is admined {
     products[productId].stock += numItems;
 
     LogAddProduct(msg.sender, productId, price, numItems);
-
     return true;
   }
 
@@ -163,8 +167,9 @@ contract StoreFront is admined {
     ifProductExists(productId)
     returns(bool success)
   {
+    require(products[productId].coPurchasePendingCount == 0);
     products[productId].exists = false;
-    //LogRemoveProduct(msg.sender, productId);
+    LogRemoveProduct(msg.sender, productId);
     return true;
   }
 
@@ -177,18 +182,20 @@ contract StoreFront is admined {
     require(numItems > 0);
     require(products[productId].stock >= numItems);
 
-    var totalPrice = products[productId].price * numItems;
+    var product = products[productId];
+    var totalPrice = product.price * numItems;
 
     require(msg.value > totalPrice);
 
-    var numStocks = products[productId].stock;
-    products[productId].stock -= numItems;
+    var numStocks = product.stock;
+    product.stock -= numItems;
 
-    require(products[productId].stock < numStocks);
+    require(product.stock < numStocks);
 
     storeBalance += totalPrice;
 
-    //LogPurchase(msg.sender, productId, numItems, price, total, now);
+    LogPurchase(msg.sender, productId, numItems, msg.sender);
+
     return true;
   }
 
@@ -201,7 +208,6 @@ contract StoreFront is admined {
     while(coPurchases[coPurchaseId].exists) {
       coPurchaseId = keccak256(coPurchaseId);
     }
-    //TODO: race condition?
   }
 
   function coPurchaseOpen(bytes32 productId, 
@@ -219,15 +225,15 @@ contract StoreFront is admined {
     require(participants.length + 1 <= coPurchaseParticipantNumberLimit);
 
     // got stack too deep exception
-    //uint numParticipants = participants.length + 1;
+    // uint numParticipants = participants.length + 1;
 
     // small discount with assumption that coPurchaseLimit is a resonably small number
-    uint totalPrice = ((products[productId].price * numItems)/(participants.length+1)) * (participants.length+1);
-    uint pricePerParticipant = totalPrice/(participants.length+1);
+    var totalPrice = ((products[productId].price * numItems)/(participants.length+1)) * (participants.length+1);
+    var pricePerParticipant = totalPrice/(participants.length+1);
 
     require(msg.value >= pricePerParticipant + coPurchaseFee);
 
-    uint numStock = products[productId].stock;
+    var numStock = products[productId].stock;
     products[productId].stock -= numItems;
 
     require(products[productId].stock < numStock);
@@ -257,11 +263,13 @@ contract StoreFront is admined {
 
     coPurchase.participants[msg.sender].balance += msg.value - coPurchaseFee;
 
-
     coPurchasePendingBalance += msg.value - coPurchaseFee;
     storeBalance += coPurchaseFee;
 
-    //LogCoPurchase(msg.sender, numItems, others);
+    products[productId].coPurchasePendingCount += 1;
+
+    LogCoPurchaseOpen(msg.sender, coPurchaseId, productId, numItems, coPurchase.participantsList, totalPrice);
+    LogCoPayment(msg.sender, msg.sender, coPurchaseId, msg.value);
   }
 
 
@@ -285,7 +293,8 @@ contract StoreFront is admined {
 
     coPurchasePendingBalance += msg.value;
 
-    //TODO: caveat with hour
+    LogCoPayment(msg.sender, msg.sender, coPurchaseId, msg.value);
+
     if(coPurchase.numPaid == coPurchase.participantsList.length) {
       coPurchase.completed = true;
       for(uint i = 0; i<coPurchase.participantsList.length; i++) {
@@ -299,10 +308,10 @@ contract StoreFront is admined {
 
       coPurchasePendingBalance -= coPurchase.totalBalance;
       storeBalance += coPurchase.totalPrice;
-      //TODO: assert
-      //LogCoPurchaseCompleted(msg.sender, coPurchaseId);
-      return true;
+
+      LogCoPurchaseComplete(msg.sender, coPurchaseId);
     }
+    return true;
   }
 
   // restock co-purchase items that exprired
@@ -317,6 +326,9 @@ contract StoreFront is admined {
     require(!coPurchases[coPurchaseId].restocked);
     coPurchases[coPurchaseId].restocked = true;
     products[coPurchases[coPurchaseId].productId].stock += coPurchases[coPurchaseId].numItems;
+    assert(products[coPurchases[coPurchaseId].productId].coPurchasePendingCount > 0);
+    products[coPurchases[coPurchaseId].productId].coPurchasePending -= 1;
+
     return true;
   }
 
@@ -336,7 +348,7 @@ contract StoreFront is admined {
 
     msg.sender.transfer(amount);
 
-    //LogCoPurchaseRefund(msg.sender, coPurchaseId, amount);
+    LogCoPurchaseRefund(msg.sender, coPurchaseId, amount);
     return true;
   }
 
@@ -348,6 +360,7 @@ contract StoreFront is admined {
     var amount = customerCredit[msg.sender];
     customerCredit[msg.sender] = 0;
     msg.sender.transfer(amount);
+    LogRefundCustomerCredit(msg.sender, amount);
     return true;
   }
 
@@ -358,7 +371,7 @@ contract StoreFront is admined {
     returns(bool)
   { 
     storeBalance += msg.value;
-    //LogOwnerDeposit(msg.sender, msg.value);
+    LogOwnerDeposit(msg.sender, msg.value);
     return true;
   }
 
@@ -370,7 +383,7 @@ contract StoreFront is admined {
     require(amount < storeBalance - coPurchasePendingBalance);
     storeBalance -= amount;
     owner.transfer(amount);
-    //LogOwnerWithdraw(msg.sender, amount);
+    LogOwnerWithdraw(msg.sender, amount);
     return true;
   }
 
@@ -384,5 +397,3 @@ contract StoreFront is admined {
 
   function () {}
 }
-
-//TODO: race btw restock & remove product
